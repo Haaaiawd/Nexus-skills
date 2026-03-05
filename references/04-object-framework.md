@@ -1,6 +1,7 @@
 # OBJECT 阶段 — 三维度质疑框架
 
-> L1 技术层 — 在执行 OBJECT 阶段前按需加载
+> ⛔ **OBJECT 阶段硬门控**：本文件由 `01-probe-protocol.md` 的 OBJECT 阶段门控强制触发读取，
+> 提出任何质疑点前必须完成本文阅读，三维度框架（Structure / Evolution / Dependency）是质疑的执行依据。
 >
 > 来源：SEI QUASAR 方法论 + MSR '26 hotspot 研究 + 架构审查最佳实践
 
