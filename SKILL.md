@@ -1,6 +1,6 @@
 ---
 name: nexus-mapper
-description: 对本地代码仓库进行结构化探测，生成供 AI 冷启动阅读的 `.nexus-map/` 知识库。当用户要求「分析项目」「生成项目地图」「让 AI 了解这个仓库」「建立项目知识库」或指定一个本地 repo 路径并希望 AI 理解其结构时触发。不适用于：纯 API 调用环境（无 run_command 工具）、无本地 Python 3.10+ 的机器、或用户只想了解某个特定文件/函数（用 view_file 即可）。
+description: 当用户要求「分析项目」「生成项目地图」「建立项目知识库」或指定本地 repo 路径并希望 AI 理解其结构时触发。对 Git 仓库执行 SKIP 五阶段探测，产出 .nexus-map/ 知识库供后续 AI 会话冷启动。不适用于：无 shell 执行能力的纯 API 环境、非 Python 主力的仓库、只查询单个文件/函数的场景。
 ---
 
 # nexus-mapper — AI 项目探测协议
@@ -11,32 +11,45 @@ description: 对本地代码仓库进行结构化探测，生成供 AI 冷启动
 
 ---
 
-## 📌 何时调用 / 何时不调用
+## ⚠️ CRITICAL — 五阶段不可跳过
 
-**✅ 调用此 Skill 的场景**：
-- 用户提供了一个本地 repo 路径，希望 AI 理解其架构
-- 需要生成 `.nexus-map/INDEX.md` 供后续 AI 会话冷启动使用
-- 用户说「帮我分析项目」「建立项目知识库」「让 AI 了解这个仓库」
+> [!IMPORTANT]
+> **五阶段必须严格按序执行。任何阶段缺失 → 视为不完整执行，`INDEX.md` 禁止生成。**
 
-**❌ 不调用此 Skill 的场景**：
-- 运行环境无 shell 执行能力（纯 API 调用模式，无 `run_command` 工具）
-- 宿主机无本地 Python 3.10+（脚本无法运行）
-- 用户只想了解某个特定文件/函数 → 直接用 `view_file` / `grep_search`
-- 目标仓库主语言**不是 Python**（当前版本仅支持 Python）
+❌ **禁止行为**：
+- 跳过 CHALLENGE 直接写输出资产
+- 在 EVIDENCE 完成前生成 `concept_model.json`
+- SCAN 阶段脚本失败后继续执行后续阶段
+
+✅ **必须做到**：
+- 每个阶段完成后显式确认「✅ 阶段名 完成」再进入下一阶段
+- CHALLENGE 必须提出 ≥3 个有代码引证的质疑点
+- 所有节点 `code_path` 必须在仓库中真实存在（亲手验证，见守则2）
 
 ---
 
-## ⚠️ 前提检查（满足以上调用场景后，验证以下条件）
+## 📌 何时调用 / 何时不调用
 
-> [!IMPORTANT]
-> **缺少任一前提 → 立即停止，告知用户具体缺失项**
+| 场景 | 调用 |
+|------|:----:|
+| 用户提供本地 repo 路径，希望 AI 理解其架构 | ✅ |
+| 需要生成 `.nexus-map/INDEX.md` 供后续 AI 会话冷启动 | ✅ |
+| 用户说「帮我分析项目」「建立项目知识库」「让 AI 了解这个仓库」 | ✅ |
+| 运行环境无 shell 执行能力（纯 API 调用模式，无 `run_command` 工具） | ❌ |
+| 宿主机无本地 Python 3.10+ | ❌ |
+| 目标仓库主语言不是 Python（当前版本限制） | ❌ |
+| 用户只想查询某个特定文件/函数 → 直接用 `view_file` / `grep_search` | ❌ |
+
+---
+
+## ⚠️ 前提检查（缺一 → 立即停止，告知用户具体缺失项）
 
 | 前提 | 检查方式 |
 |------|---------|
-| ✅ 本地 Git 仓库 | `$repo_path/.git` 目录存在 |
-| ✅ Python 3.10+ 可用 | `python --version` 或 `python3 --version` >= 3.10 |
-| ✅ 脚本依赖已安装 | `python -c "import tree_sitter"` 无报错（详见 `scripts/requirements.txt`） |
-| ✅ 有 shell 执行能力 | Agent 环境支持 `run_command` 工具调用 |
+| 本地 Git 仓库 | `$repo_path/.git` 目录存在 |
+| Python 3.10+ | `python --version` >= 3.10 |
+| 脚本依赖已安装 | `python -c "import tree_sitter"` 无报错 |
+| 有 shell 执行能力 | Agent 环境支持 `run_command` 工具调用 |
 
 ---
 
@@ -46,7 +59,7 @@ description: 对本地代码仓库进行结构化探测，生成供 AI 冷启动
 repo_path: 目标仓库的本地绝对路径（必填）
 ```
 
-**当前版本限制**：仅支持 Python 语言代码库（`.py` 文件为主）。
+**当前限制**：仅支持 Python 语言代码库（`.py` 文件为主）。
 
 ---
 
@@ -56,79 +69,141 @@ repo_path: 目标仓库的本地绝对路径（必填）
 
 ```text
 .nexus-map/
-├── INDEX.md              ← AI 冷启动主入口（< 2000 tokens）
+├── INDEX.md                    ← AI 冷启动主入口（< 2000 tokens）
 ├── arch/
-│   └── systems.md        ← 系统边界 + 代码位置（< 1500 tokens）
+│   ├── systems.md              ← 系统边界 + 代码位置
+│   └── dependencies.md         ← Mermaid 依赖图 + 时序图
 ├── concepts/
-│   └── concept_model.json  ← Schema V1 机器可读图谱
+│   ├── concept_model.json      ← Schema V1 机器可读图谱
+│   └── domains.md              ← 核心领域概念说明
+├── hotspots/
+│   └── git_forensics.md        ← Git 热点 + 耦合对分析
 └── raw/
-    ├── ast_nodes.json    ← Tree-sitter 解析原始数据
-    ├── git_stats.json    ← Git 热点与耦合数据
-    └── file_tree.txt     ← 过滤后的文件树
+    ├── ast_nodes.json          ← Tree-sitter 解析原始数据
+    ├── git_stats.json          ← Git 热点与耦合数据
+    └── file_tree.txt           ← 过滤后的文件树
 ```
 
 ---
 
-## 🔄 SKIP 五阶段协议（不可跳过）
+## 🔄 SKIP 五阶段协议
 
-> [!IMPORTANT]
-> **五个阶段必须严格按序执行。禁止跳步，禁止在 CHALLENGE 完成之前写任何输出资产。**
-> 缺少任何阶段 → 视为不完整执行，`INDEX.md` 禁止生成。
+| 阶段 | 核心动作 | 完成标志 |
+|------|---------|---------|
+| **S**CAN | 运行脚本，产出 `raw/` 三个文件 | 三文件均非空 |
+| **H**YPOTHESIS | 阅读 README/热点/文件树，识别 ≥3 个系统 | 每个系统有 1 句职责描述 + 初步 `code_path` |
+| **C**HALLENGE | 提出 ≥3 个反驳点，每点附代码引证 | 所有质疑有具体文件/行号证据 |
+| **E**VIDENCE | 逐一验证质疑，修正错误节点 | 所有节点 `code_path` 已亲手验证存在 |
+| **C**RYSTALLIZE | 原子写入全部 `.nexus-map/` 文件 | 全部文件通过 Schema 校验 |
 
-| 阶段 | 代号 | 核心动作 | 完成标志 |
-|------|------|---------|---------|
-| **S**CAN | 扫描机械数据 | 运行脚本，产出 `raw/` 三个文件 | 三文件均非空 |
-| **H**YPOTHESIS | 提出系统假说 | 阅读 README/入口/热点，识别 ≥3 个系统/域 | 每个假说系统有 1 句职责描述 |
-| **C**HALLENGE | 主动质疑假说 | 列出 ≥3 个对 HYPOTHESIS 结论的反驳点 | 每个质疑有具体代码引证 |
-| **E**VIDENCE | 验证与修正 | 用 grep/view_file 逐一验证质疑，修正错误节点 | 所有节点有真实存在的 `code_path` |
-| **C**RYSTALLIZE | 写入输出资产 | 一次性写入全部 `.nexus-map/` 文件 | 全部文件通过 Schema 校验 |
-
-### 各阶段详细步骤
-→ 加载 [`references/01-skip-protocol.md`](./references/01-skip-protocol.md)
-
-### 输出 Schema 规范
-→ 加载 [`references/02-output-schema.md`](./references/02-output-schema.md)
-
-### 边界案例处理
-→ 加载 [`references/03-edge-cases.md`](./references/03-edge-cases.md)
+各阶段详细步骤 → [`references/01-skip-protocol.md`](./references/01-skip-protocol.md)  
+输出 Schema 规范 → [`references/02-output-schema.md`](./references/02-output-schema.md)  
+边界案例处理 → [`references/03-edge-cases.md`](./references/03-edge-cases.md)
 
 ---
 
-## 🚫 禁止词（Forbidden Words）
+## 🛡️ 执行守则
+
+### 守则1: CHALLENGE 拒绝形式主义
+
+CHALLENGE 的存在意义是打破 HYPOTHESIS 的幸存者偏差。大量工程事实隐藏在目录命名和 git 热点背后，第一直觉几乎总是错的。
+
+❌ **无效质疑（禁止提交）**：
+```
+Q1: 也许我对系统结构理解得不够深入
+Q2: 需要进一步确认 xxx 目录的职责
+```
+
+✅ **有效质疑格式**：
+```
+Q1: git_stats 显示 tasks/analysis_tasks.py 变更 21 次（high risk），
+    但 HYPOTHESIS 认为编排入口是 evolution/detective_loop.py。
+    矛盾：若 detective_loop 是入口，为何 analysis_tasks 热度更高？
+    证据线索: git_stats.json hotspots[0].path
+    验证计划: view tasks/analysis_tasks.py 的 class 定义 + import 树
+```
+
+---
+
+### 守则2: code_path 不存在则节点无效
 
 > [!IMPORTANT]
-> 以下词语出现在任何输出文件中均视为 `[!ERROR]`，必须返工：
+> 写入 `concept_model.json` 前，**每一个节点的 `code_path` 都必须亲手验证存在**。
 
-`待确认` · `可能是` · `疑似` · `也许` · `待定` · `暂不清楚` · `需要进一步` · `不确定`
+```bash
+# EVIDENCE 阶段验证方式
+ls $repo_path/src/nexus/application/weaving/   # ✅ 目录存在 → 节点有效
+ls $repo_path/src/nexus/application/nonexist/  # ❌ [!ERROR] → 修正或删除此节点
+```
+
+❌ 禁止：`code_path: "src/nexus/unknown/"` 或 `code_path: ""`（未验证路径/空路径）
+
+---
+
+### 守则3: CRYSTALLIZE 原子性
+
+先全部写入 `.nexus-map/.tmp/`，全部成功后整体移动到正式目录，删除 `.tmp/`。
+
+**目的**：中途失败不留半成品。下次执行检测到 `.tmp/` 存在 → 清理后重新生成。
+
+✅ 幂等性规则：
+
+| 状态 | 处理方式 |
+|------|----------|
+| `.nexus-map/` 不存在 | 直接继续 |
+| `.nexus-map/` 存在且 `INDEX.md` 有效 | 询问用户：「是否覆盖？[y/n]」 |
+| `.nexus-map/` 存在但文件不完整 | 「检测到未完成分析，将重新生成」，直接继续 |
+
+---
+
+### 守则4: INDEX.md 是唯一冷启动入口
+
+`INDEX.md` 的读者是**从未见过这个仓库的 AI**。两个硬约束：
+- **< 2000 tokens** — 超过就重写，不是截断
+- **无禁止词** — 任一出现即 `[!ERROR]`，整页返工
+
+写完后执行 token 估算：行数 × 平均 30 tokens/行 = 粗估值。
+
+---
+
+## 🚫 禁止词（任意输出文件中出现 → `[!ERROR]` 必须返工）
+
+```
+中文：待确认 · 可能是 · 疑似 · 也许 · 待定 · 暂不清楚 · 需要进一步 · 不确定
+英文：pending · maybe · possibly · perhaps · TBD · to be confirmed
+```
 
 ---
 
 ## 🛠️ 脚本工具链
 
-脚本位于本 Skill 目录的 `scripts/` 子目录：
-
 ```bash
+# 设置 SKILL_DIR（根据实际安装路径）
+# 场景 A: 作为 .agent/skills 安装
+SKILL_DIR=".agent/skills/nexus-mapper"
+# 场景 B: 独立 repo（开发/调试时）
+SKILL_DIR="/path/to/nexus-mapper"
+
 # SCAN 阶段调用
-python .agent/skills/nexus-mapper/scripts/extract_ast.py <repo_path> [--max-nodes 500]
-python .agent/skills/nexus-mapper/scripts/git_detective.py <repo_path> --days 90
+python $SKILL_DIR/scripts/extract_ast.py <repo_path> [--max-nodes 500] \
+  > <repo_path>/.nexus-map/raw/ast_nodes.json
+
+python $SKILL_DIR/scripts/git_detective.py <repo_path> --days 90 \
+  > <repo_path>/.nexus-map/raw/git_stats.json
 ```
 
-**依赖安装**（首次使用）：
+**依赖安装（首次使用）**：
 ```bash
-# 独立使用（任何项目）
-pip install -r .agent/skills/nexus-mapper/scripts/requirements.txt
-
-# 在 Nexus 项目内（依赖已由 poetry 环境覆盖，使用 poetry run）
-poetry run python .agent/skills/nexus-mapper/scripts/extract_ast.py <repo_path>
+pip install -r $SKILL_DIR/scripts/requirements.txt
 ```
 
 ---
 
-## ✅ 质量自检（CRYSTALLIZE 前必须通过）
+## ✅ 质量自检（CRYSTALLIZE 前必须全部通过）
 
-- [ ] 所有 5 个阶段均已完成（SCAN → CRYSTALLIZE）
-- [ ] CHALLENGE 提出了 ≥3 个质疑点
-- [ ] 每个节点的 `code_path` 在仓库中真实存在
-- [ ] `responsibility` 字段无禁止词，长度 10-100 字
-- [ ] `INDEX.md` 全文 < 2000 tokens
+- [ ] 五个阶段均已完成，每阶段有显式「✅ 完成」标记
+- [ ] CHALLENGE 提出了 ≥3 个有代码引证的质疑点
+- [ ] 每个节点的 `code_path` 已亲手验证存在（守则2）
+- [ ] `responsibility` 字段：无禁止词，10-100 字
+- [ ] `INDEX.md` 全文 < 2000 tokens，无禁止词（守则4）
 - [ ] 无任何系统节点的 `code_path` 为空或占位符

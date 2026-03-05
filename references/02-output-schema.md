@@ -1,7 +1,7 @@
 # 输出 Schema 规范
 
 > L1 技术层 — CRYSTALLIZE 阶段前按需加载
-> ⚠️ 本文基于 T4.1.1 实际运行结果校正（2026-03-05）
+> 本文 Schema 均基于实际运行输出校正，与脚本当前版本保持一致。
 
 ---
 
@@ -125,11 +125,11 @@
 
 | 字段 | 必需 | 触发 `[!ERROR]` 的情况 |
 |------|:----:|-----------------------|
-| `id` | ✅ | 全局重复；含大写字母或空格 |
-| `type` | ✅ | 不在 `System/Domain/Module/Class/Function` 枚举中 |
+| `id` | ✅ | 全局重复；含大写字母或空格（必须为 kebab-case 小写）|
+| `type` | ✅ | 不在枚举 `System / Domain / Module / Class / Function` 中 |
 | `label` | ✅ | 空字符串 |
 | `responsibility` | ✅ | 含禁止词；字数 < 10 或 > 100 |
-| `code_path` | ✅ | 路径在 repo 中不实际存在 |
+| `code_path` | ✅ | 路径在 repo 中不实际存在（必须亲手验证，见 SKILL.md 守则2）|
 
 ---
 
@@ -138,6 +138,6 @@
 > 出现在任意输出文件的 `responsibility` 或正文叙述中 → `[!ERROR]` 必须返工
 
 ```
-待确认 / 可能是 / 疑似 / 也许 / 待定 / 暂不清楚 / 需要进一步 / 不确定
-pending / maybe / possibly / perhaps / TBD / to be confirmed
+中文：待确认 · 可能是 · 疑似 · 也许 · 待定 · 暂不清楚 · 需要进一步 · 不确定
+英文：pending · maybe · possibly · perhaps · TBD · to be confirmed
 ```

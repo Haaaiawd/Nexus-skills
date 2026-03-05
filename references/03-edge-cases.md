@@ -1,4 +1,4 @@
-# 边界案例与注意事项
+# 边界案例与处理规范
 
 > L1 技术层 — 遇到特殊情况时按需加载
 
@@ -35,12 +35,12 @@
 
 当 `stats.truncated=true` 时：
 - `extract_ast.py` **优先保留 Module 和 Class 节点**
-- **Function 节点被直接丢弃**（不生成单独的 `raw/functions.json` 文件）
-- `stats.truncated_nodes` 记录被丢弃的节点数量
+- Function 节点被直接丢弃，`stats.truncated_nodes` 记录丢弃数量
 - CRYSTALLIZE 阶段仍可基于 Module/Class 节点产出完整的 `concept_model.json`
 
-> ⚠️ 注：detail.md §3.1 描述截断的 Function 节点会输出到 `raw/functions.json`，
-> 但实际实现**不生成此文件**，截断节点直接丢弃。（T4.1.1 实际验证，2026-03-05）
+> [!DEVIATION]
+> **已知实现偏差**：截断的 Function 节点被**直接丢弃**，**不会生成** `raw/functions.json`。
+> 如任何文档描述截断节点写入单独文件，均以本实际行为为准。
 
 ---
 
@@ -57,10 +57,10 @@
 
 ### 无 README 的项目
 - HYPOTHESIS 阶段直接跳至 `pyproject.toml` / `package.json`
-- 在假说日志中注明：「无 README，置信度降低，CHALLENGE 阶段需额外质疑入口点」
+- 假说日志中注明：「无 README，置信度降低，CHALLENGE 阶段需额外质疑入口点」
 
-### 过深嵌套
-- 超过 8 层嵌套的 Python 文件：AST 解析正常工作，不受目录层级影响
+### 目录过深嵌套
+- Python 文件超过 8 层嵌套：AST 解析正常工作，不受目录层级影响
 - `file_tree.txt` 行数 > 500 时：HYPOTHESIS 阶段仅读取前 300 行感知结构
 
 ---
@@ -69,4 +69,4 @@
 
 - 多次执行会触发覆盖确认，不会静默覆盖已有分析
 - 写入路径：先写 `.nexus-map/.tmp/`，全部成功后整体移动 → 避免中途失败留半成品
-- 如果写入中途中断（如 Agent 超时）：下次执行时检测到 `.tmp/` 目录 → 清理后重新生成
+- 中途中断（如 Agent 超时）：下次执行检测到 `.tmp/` 目录 → 清理后重新生成
