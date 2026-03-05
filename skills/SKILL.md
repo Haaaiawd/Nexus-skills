@@ -1,6 +1,6 @@
 ---
 name: nexus-mapper
-description: 当用户要求「分析项目」「生成项目地图」「建立项目知识库」或指定本地 repo 路径并希望 AI 理解其结构时触发。对 Git 仓库执行 PROBE 五阶段探测，产出 .nexus-map/ 知识库供后续 AI 会话冷启动。支持 Python/TypeScript/JavaScript/Java/Go/Rust/C++/C# 等主流语言。不适用于：无 shell 执行能力的纯 API 环境、只查询单个文件/函数的场景。
+description: Build a persistent codebase knowledge map in one run. Generates `.nexus-map/` — a compressed architectural context that any AI session can load from INDEX.md without re-exploration. Extracts subsystems, dependencies, hotspots, and code locations from git repositories (17+ languages supported). Problem it solves: context loss between new chat windows, repeated onboarding overhead, missed change implications. Use when: analyzing unfamiliar codebases, needing persistent context across sessions, or surfacing impact analysis. Not for: pure API environments without shell execution, or single-file inspection.
 ---
 
 # nexus-mapper — AI 项目探测协议
