@@ -19,6 +19,8 @@
 
 Run nexus-mapper on a repository once. It writes a `.nexus-map/` directory with everything an AI needs to understand the codebase — architecture, boundaries, hot files, dependency graph. Next time you open a chat window, the AI reads one file and already knows where everything lives.
 
+The mapper challenges its own first-pass hypothesis before it writes final assets. It prefers a small number of evidence-backed corrections over padded issue lists or fake certainty.
+
 ```
 .nexus-map/
 ├── INDEX.md              ← Load this first. Full architectural context, under 2000 tokens.
@@ -28,7 +30,7 @@ Run nexus-mapper on a repository once. It writes a `.nexus-map/` directory with 
 ├── concepts/
 │   ├── concept_model.json ← Machine-readable knowledge graph. Structured for programmatic use.
 │   └── domains.md        ← The domain language this codebase speaks, in plain terms.
-├── hotspots/
+├── hotspots/             ← Present when git metadata is available.
 │   └── git_forensics.md  ← Files that change constantly, and pairs that always change together.
 │                           These are where bugs hide and where changes break things.
 └── raw/                  ← Source data: AST nodes, git statistics, filtered file tree.
@@ -50,9 +52,8 @@ A git repository is recommended but not required. Without git history, the `hots
 **Install script dependencies before first use:**
 
 ```bash
-pip install -r .agent/skills/nexus-mapper/scripts/requirements.txt
+pip install -r skills/nexus-mapper/scripts/requirements.txt
 ```
-
 ---
 
 ## Install
@@ -93,21 +94,29 @@ Unknown extensions are skipped silently. Mixed-language repositories work withou
 
 ---
 
-## Skill structure
+## Repository structure
 
 ```
 nexus-mapper/
-├── SKILL.md                      ← Execution protocol and guardrails
-├── scripts/
-│   ├── extract_ast.py            ← Multi-language AST extractor
-│   ├── git_detective.py          ← Git hotspot and coupling analysis
-│   └── requirements.txt
-└── references/
-    ├── 01-probe-protocol.md      ← Stage-by-stage execution blueprint
-    ├── 02-output-schema.md       ← Output schema reference
-    ├── 03-edge-cases.md          ← Edge case handling (monorepos, no git, etc.)
-    └── 04-object-framework.md    ← Adversarial validation framework
+├── README.md
+├── README.zh-CN.md
+├── Icon.png
+├── evals/                        ← Evaluation assets and test plans for iterating on the skill
+└── skills/
+  └── nexus-mapper/
+    ├── SKILL.md              ← Execution protocol and guardrails
+    ├── scripts/
+    │   ├── extract_ast.py    ← Multi-language AST extractor
+    │   ├── git_detective.py  ← Git hotspot and coupling analysis
+    │   └── requirements.txt
+    └── references/
+      ├── 01-probe-protocol.md
+      ├── 02-output-schema.md
+      ├── 03-edge-cases.md
+      └── 04-object-framework.md
 ```
+
+If you are copying just the skill payload into another agent workspace, copy the `skills/nexus-mapper/` directory.
 
 ---
 

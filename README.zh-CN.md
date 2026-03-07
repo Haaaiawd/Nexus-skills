@@ -19,6 +19,8 @@
 
 对一个仓库运行一次 nexus-mapper，它会在项目根目录写入 `.nexus-map/` 知识库，记录架构边界、系统分工、高频变更文件和依赖关系图。之后每次打开新对话，AI 读一个文件就知道整个项目的全貌。
 
+它不会把第一眼猜测直接写成结论。正式产出前，协议会先用代码证据和 git 线索挑战初始判断，宁可少报，也不为了“看起来全面”而凑问题或装确定。
+
 ```
 .nexus-map/
 ├── INDEX.md              ← 冷启动入口。完整架构上下文，控制在 2000 tokens 以内。
@@ -28,7 +30,7 @@
 ├── concepts/
 │   ├── concept_model.json ← 机器可读的知识图谱，供程序化使用。
 │   └── domains.md        ← 这个代码库使用的领域语言，人能读懂的版本。
-├── hotspots/
+├── hotspots/             ← 仅在存在 git 元数据时生成。
 │   └── git_forensics.md  ← 变更最频繁的文件，以及总是同时变更的文件对。
 │                           改动这些地方最容易出问题。
 └── raw/                  ← 原始数据：AST 节点、git 统计、过滤后的文件树。
@@ -50,7 +52,7 @@
 **首次使用前安装脚本依赖：**
 
 ```bash
-pip install -r .agent/skills/nexus-mapper/scripts/requirements.txt
+pip install -r skills/nexus-mapper/scripts/requirements.txt
 ```
 
 ---
@@ -93,21 +95,29 @@ Python · JavaScript · JSX · TypeScript · TSX · Java · Go · Rust · C++ ·
 
 ---
 
-## Skill 结构
+## 仓库结构
 
 ```
 nexus-mapper/
-├── SKILL.md                      ← 执行协议与守则
-├── scripts/
-│   ├── extract_ast.py            ← 多语言 AST 提取器
-│   ├── git_detective.py          ← Git 热点与耦合分析
-│   └── requirements.txt
-└── references/
-    ├── 01-probe-protocol.md      ← 各阶段详细执行步骤
-    ├── 02-output-schema.md       ← 输出 Schema 规范
-    ├── 03-edge-cases.md          ← 边界案例处理（monorepo、无 git 等）
-    └── 04-object-framework.md    ← 三维度质疑验证框架
+├── README.md
+├── README.zh-CN.md
+├── Icon.png
+├── evals/                        ← 评测集与测试计划，用于持续迭代 skill
+└── skills/
+  └── nexus-mapper/
+    ├── SKILL.md              ← 执行协议与守则
+    ├── scripts/
+    │   ├── extract_ast.py    ← 多语言 AST 提取器
+    │   ├── git_detective.py  ← Git 热点与耦合分析
+    │   └── requirements.txt
+    └── references/
+      ├── 01-probe-protocol.md
+      ├── 02-output-schema.md
+      ├── 03-edge-cases.md
+      └── 04-object-framework.md
 ```
+
+如果只是把 skill 本体复制到其他 agent 工作区，复制 `skills/nexus-mapper/` 这一层即可。
 
 ---
 

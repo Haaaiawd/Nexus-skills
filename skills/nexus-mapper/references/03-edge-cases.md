@@ -9,13 +9,13 @@
 
 ### 无 git 历史的新仓库
 - 现象：`$repo_path/.git` 存在但只有 1 次提交
-- 处理：跳过 `git_detective.py`，`raw/git_stats.json` **不生成**
+- 处理：跳过 `git_detective.py`，在执行日志或最终输出中写明 `git analysis skipped: insufficient history`
 - PROFILE 仍然完成（只需 `ast_nodes.json` + `file_tree.txt` 非空即可通过检查）
 
 ### 非 git 仓库
 - 现象：`$repo_path/.git` 不存在
-- 处理：**立即停止** → 输出 `[!ERROR: NOT_A_GIT_REPO]`
-- 不继续执行任何后续阶段
+- 处理：跳过 `git_detective.py`，继续执行后续阶段
+- 在最终输出中明确标注：`hotspots skipped because repository has no git metadata`
 
 ---
 
@@ -63,7 +63,7 @@
 
 ### 无 README 的项目
 - REASON 阶段直接跳至 `pyproject.toml` / `package.json`
-- 假说日志中注明：「无 README，置信度降低，OBJECT 阶段需额外质疑入口点」
+- 假说日志中注明：「无 README，evidence gap 在项目入口说明，OBJECT 阶段需额外质疑入口点」
 
 ### 目录过深嵌套
 - Python 文件超过 8 层嵌套：AST 解析正常工作，不受目录层级影响

@@ -1,7 +1,7 @@
 # PROBE 协议 — 各阶段详细步骤
 
 > 本文件是 SKILL.md 的执行蓝图，Skill 激活后**第一步**即读取本文件。
-> 各阶段的 ⛔ 门控指令在下文中内嵌，必须按顺序执行，不得跳过。
+> 各阶段的 ⛔ 门控指令在下文中内嵌。顺序执行是为了让结论建立在证据链上，而不是第一反应上。
 
 ---
 
@@ -9,7 +9,9 @@
 
 **前置验证**
 1. 确认 `$repo_path` 目录存在
-2. 确认 `$repo_path/.git` 目录存在 → 否则 `[!ERROR: NOT_A_GIT_REPO]` 停止
+2. 检查 `$repo_path/.git` 是否存在
+  - 存在：执行 git 热点分析
+  - 不存在：记录 `git analysis skipped`，继续进行 AST 与文件树探测
 
 **执行步骤**
 
@@ -18,7 +20,7 @@
 python $SKILL_DIR/scripts/extract_ast.py $repo_path [--max-nodes 500] \
   > $repo_path/.nexus-map/raw/ast_nodes.json
 
-# 步骤 2: 运行 git 热点分析
+# 步骤 2: 运行 git 热点分析（仅在存在 .git 时）
 python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
   > $repo_path/.nexus-map/raw/git_stats.json
 
@@ -32,8 +34,9 @@ python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
 
 **完成检查（任一失败 → 停止，不进入 REASON）**
 - [ ] `raw/ast_nodes.json` 已写入（即使 `nodes` 为空列表也属正常——不支持的语言降级为空）
-- [ ] `raw/git_stats.json` 非空，包含 `hotspots` 字段
 - [ ] `raw/file_tree.txt` 非空
+- [ ] 若存在 git 历史：`raw/git_stats.json` 非空，包含 `hotspots` 字段
+- [ ] 若不存在 git 历史：已明确记录这是一次无 git 降级探测
 
 ---
 
@@ -51,18 +54,18 @@ python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
 2. `pyproject.toml` / `package.json` / `pom.xml` — 技术栈与依赖
 3. 主入口文件（`main.py`, `index.ts`, `Application.java`）
 4. `raw/file_tree.txt` — 目录结构感知
-5. `raw/git_stats.json` hotspots Top 5 — 最活跃文件
+5. `raw/git_stats.json` hotspots Top 5 — 最活跃文件（仅在 git 数据可用时）
 
 **执行要求**
-- 进行深度思考，逐步推演 3-5 个决策点
-- 识别 **≥3 个 System 级节点**，每个有初步的 `code_path` 假设和置信度标注
+- 进行深度思考，逐步推演足够支撑结论的关键决策点，通常为 3-5 个
+- 识别仓库的主要 System 级节点，通常为 1-5 个；不要为了凑数量把纯技术细节拆成独立系统
 
 **记录格式**（工作记忆，不写文件）
 ```
 [REASON LOG]
 - System A: 推断职责=X, code_path=Y （置信度: 高/中/低）
 - System B: 推断职责=X, code_path=Y （置信度: 高/中/低）
-- 疑问: Z 目录归属不确定（将在 OBJECT 中质疑）
+- Evidence gap: Z 目录归属缺少直接证据（将在 OBJECT 中质疑）
 ```
 
 ---
@@ -74,9 +77,9 @@ python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
 > ```
 > read_file  references/04-object-framework.md
 > ```
-> 未读取该文件即提出质疑 → 视为形式主义，必须重做。三维度框架（Structure / Evolution / Dependency）是本阶段的执行依据，不是参考。
+> 未读取该文件即提出质疑，极易把第一眼印象当成问题。三维度框架（Structure / Evolution / Dependency）是本阶段的执行依据，不是装饰。
 
-**质疑协议 — 必须提出 ≥3 个质疑点，每个附代码引证**
+**质疑协议 — 提出足以挑战当前假设的最少一组高价值质疑，通常 1-3 个，每个附证据线索**
 
 每个质疑点格式：
 ```
@@ -89,11 +92,11 @@ Q{N}: [具体的矛盾或可疑之处]
 
 ❌ **不合格质疑（禁止提交，必须替换）**：
 ```
-Q1: 也许我对系统结构理解得不够深入
-Q2: 需要进一步确认 xxx 目录的职责
-Q3: 不确定 yyy 是否真的是入口
+Q1: 我对系统结构的把握还不够扎实
+Q2: xxx 目录的职责暂时没有直接证据
+Q3: yyy 是否是入口目前没有验证
 ```
-▲ 上述质疑使用了禁止词，且没有代码引证，无法在 BENCHMARK 阶段验证。
+▲ 上述质疑的问题不在于措辞本身，而在于没有代码引证，也没有可执行的验证计划。
 
 ✅ **合格示例**：
 ```
@@ -123,7 +126,7 @@ Q2: application/weaving/ 目录命名暗示「语义织入」，但其下
 
 **全局节点校验（全部 System 节点逐一执行）**
 - [ ] 每个节点 `code_path` 在 repo 中实际存在（`ls` 或 `view_file` 确认）
-- [ ] `responsibility` 无禁止词，表意清晰，10-100 字
+- [ ] `responsibility` 表意清晰、具体；若证据不足，明确记录 evidence gap
 - [ ] 节点 `id` 全局唯一，kebab-case，全部小写
 
 > 发现关键系统完全识别错误 → 允许返回 REASON 重建模型，并重新执行 OBJECT。
@@ -165,6 +168,6 @@ Q2: application/weaving/ 目录命名暗示「语义织入」，但其下
 3. 去重：`(source, target, type)` 三元组相同的边保留一条
 
 **完成自检**
-- [ ] `INDEX.md` 存在，无禁止词，< 2000 tokens
+- [ ] `INDEX.md` 存在，结论具体且对证据缺口诚实，< 2000 tokens
 - [ ] `concept_model.json` 所有 System 节点有非空 `code_path`
 - [ ] `arch/dependencies.md` 包含 ≥1 个 Mermaid 图

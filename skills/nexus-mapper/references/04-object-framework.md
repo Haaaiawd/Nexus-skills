@@ -59,7 +59,7 @@ Q: git_stats 显示 tasks/xxx.py 变更 21 次（high risk），
 ```
 
 **高价值演化质疑**:
-- 热点 Top3 的文件中，有 ≥1 个不在假设的"核心系统"内
+- 热点前列的文件中，出现了不在假设"核心系统"内的关键文件
 - 某两个文件的 `coupling_score > 0.7`，但分属假设的不同 System（暗示边界划错）
 - 假设的"核心系统"在热点榜上排名靠后（该系统真的是核心吗？）
 
@@ -97,8 +97,8 @@ Q: 假设 infrastructure/ 是底层，application/ 是上层，
 | 🟡 **High** | 核心系统的 `code_path` 可能有误或遗漏了重要子目录 | BENCHMARK 首批验证 |
 | 🔵 **Medium** | 子目录职责划分模糊，可能影响 `responsibility` 的准确性 | BENCHMARK 第二批验证 |
 
-> **注意**：每次 OBJECT 执行中，至少应有 ≥1 个 Critical 或 High 级质疑。
-> 如果所有质疑都是 Medium，说明 REASON 假说过于保守，需要更大胆地提出系统判断。
+> **注意**：如果证据只支持 Medium，就保持 Medium。不要为了显得有力度而抬高严重度。
+> 更重要的是：至少有一条质疑必须真正可能改变系统边界、主入口判断或依赖方向。
 
 ---
 
@@ -111,7 +111,7 @@ Q: 假设 infrastructure/ 是底层，application/ 是上层，
 - [ ] 是否有跨系统的 `utils/` 或 `common/` 目录存在模糊地带？
 
 **Evolution（演化）**
-- [ ] hotspots Top3 是否都在假设的"高重要性系统"内？
+- [ ] 若 git 数据可用，热点前列是否支持你对"核心系统"的判断？
 - [ ] coupling_pairs 中是否有跨你假设系统边界的强耦合对（score > 0.5）？
 
 **Dependency（依赖）**

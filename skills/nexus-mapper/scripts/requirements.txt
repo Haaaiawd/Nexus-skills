@@ -4,5 +4,3 @@
 
 tree-sitter>=0.22.0
 tree-sitter-language-pack
-# fallback（仅在无法安装 language-pack 时使用，仅支持 Python 仓库）
-# tree-sitter-python

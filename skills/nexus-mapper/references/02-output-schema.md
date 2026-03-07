@@ -130,16 +130,28 @@
 | `id` | ✅ | 全局重复；含大写字母或空格（必须为 kebab-case 小写）|
 | `type` | ✅ | 不在枚举 `System / Domain / Module / Class / Function` 中 |
 | `label` | ✅ | 空字符串 |
-| `responsibility` | ✅ | 含禁止词；字数 < 10 或 > 100 |
+| `responsibility` | ✅ | 空泛到无法验证；字数 < 10 或 > 120 |
 | `code_path` | ✅ | 路径在 repo 中不实际存在（必须亲手验证，见 SKILL.md 守则2）|
 
 ---
 
-## 🚫 禁止词列表
+## 🧭 不确定性与结论表达
 
-> 出现在任意输出文件的 `responsibility` 或正文叙述中 → `[!ERROR]` 必须返工
+不要把模糊词本身当结论。真正的问题不是出现了 `maybe` 或“待确认”，而是只留下模糊词，却没有说明证据为什么不够。
 
 ```
-中文：待确认 · 可能是 · 疑似 · 也许 · 待定 · 暂不清楚 · 需要进一步 · 不确定
-英文：pending · maybe · possibly · perhaps · TBD · to be confirmed
+不推荐裸写：待确认 · 可能是 · 疑似 · 也许 · 待定 · 暂不清楚 · 需要进一步 · 不确定
+不推荐裸写：pending · maybe · possibly · perhaps · TBD · to be confirmed
 ```
+
+推荐写法：
+
+```markdown
+evidence gap: 未发现 `src/server/` 被任何入口文件直接引用，因此暂不把它标记为主系统。
+unknown: 仓库没有 git 历史，无法判断真实热点文件。
+```
+
+要求：
+- 可以保留不确定，但必须指出缺失的是哪一类证据
+- 结论段优先写已验证事实，再写尚未验证部分
+- 不要为了显得自信而删除真实存在的证据缺口
