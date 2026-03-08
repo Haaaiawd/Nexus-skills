@@ -20,7 +20,7 @@ query_graph.py — AST 按需查询工具
 import sys
 import json
 import argparse
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from collections import defaultdict
 
 
@@ -69,6 +69,19 @@ class GitStats:
 class ASTGraph:
     """内存中的 AST 图索引，支持多种查询模式。"""
 
+    SOURCE_ROOT_MARKERS = (
+        ('src',),
+        ('backend', 'src'),
+        ('frontend', 'src'),
+        ('client', 'src'),
+        ('src', 'main', 'python'),
+        ('src', 'test', 'python'),
+        ('src', 'main', 'java'),
+        ('src', 'test', 'java'),
+        ('src', 'main', 'kotlin'),
+        ('src', 'test', 'kotlin'),
+    )
+
     def __init__(self, data: dict, git_stats: GitStats | None = None):
         self.data = data
         self.nodes: list[dict] = data.get('nodes', [])
@@ -83,8 +96,11 @@ class ASTGraph:
         self.modules_by_path: dict[str, dict] = {}
         self.imports_forward: dict[str, set[str]] = defaultdict(set)
         self.imports_reverse: dict[str, set[str]] = defaultdict(set)
+        self.internal_imports_forward: dict[str, set[str]] = defaultdict(set)
+        self.internal_imports_reverse: dict[str, set[str]] = defaultdict(set)
         self.contains_children: dict[str, list[dict]] = defaultdict(list)
         self.path_to_module_id: dict[str, str] = {}
+        self.alias_to_module_ids: dict[str, set[str]] = defaultdict(set)
 
         self._build_index()
 
@@ -98,6 +114,8 @@ class ASTGraph:
             if node['type'] == 'Module' and path:
                 self.modules_by_path[path] = node
                 self.path_to_module_id[path] = nid
+                for alias in self._module_aliases(nid, path):
+                    self.alias_to_module_ids[alias].add(nid)
 
         for edge in self.edges:
             src, tgt, etype = edge['source'], edge['target'], edge['type']
@@ -108,6 +126,64 @@ class ASTGraph:
                 child = self.nodes_by_id.get(tgt)
                 if child:
                     self.contains_children[src].append(child)
+
+        module_ids = {n['id'] for n in self.nodes if n['type'] == 'Module'}
+        for source, targets in self.imports_forward.items():
+            if source not in module_ids:
+                continue
+            for target in targets:
+                resolved = self.resolve_import_target(target)
+                if resolved and resolved in module_ids and resolved != source:
+                    self.internal_imports_forward[source].add(resolved)
+                    self.internal_imports_reverse[resolved].add(source)
+
+    def _module_aliases(self, module_id: str, path: str) -> set[str]:
+        aliases = {module_id}
+        parts = list(PurePosixPath(path.replace('\\', '/')).parts)
+        if not parts:
+            return aliases
+
+        stem = PurePosixPath(parts[-1]).stem
+        normalized_parts = parts[:-1] if stem == '__init__' else parts[:-1] + [stem]
+
+        for marker in self.SOURCE_ROOT_MARKERS:
+            if tuple(normalized_parts[:len(marker)]) == marker and len(normalized_parts) > len(marker):
+                aliases.add('.'.join(normalized_parts[len(marker):]))
+
+        for idx, part in enumerate(normalized_parts):
+            if part == 'src' and idx + 1 < len(normalized_parts):
+                aliases.add('.'.join(normalized_parts[idx + 1:]))
+
+        return {alias for alias in aliases if alias}
+
+    def resolve_import_target(self, target: str) -> str | None:
+        if target in self.nodes_by_id and self.nodes_by_id[target]['type'] == 'Module':
+            return target
+
+        direct = self.alias_to_module_ids.get(target)
+        if direct and len(direct) == 1:
+            return next(iter(direct))
+
+        parts = target.split('.')
+        while len(parts) > 1:
+            parts = parts[:-1]
+            candidate = '.'.join(parts)
+            matches = self.alias_to_module_ids.get(candidate)
+            if matches and len(matches) == 1:
+                return next(iter(matches))
+
+        return None
+
+    def _classify_imports(self, imports: set[str]) -> tuple[list[tuple[str, str]], list[str]]:
+        internal: list[tuple[str, str]] = []
+        external: list[str] = []
+        for imp in sorted(imports):
+            resolved = self.resolve_import_target(imp)
+            if resolved:
+                internal.append((imp, resolved))
+            else:
+                external.append(imp)
+        return internal, external
 
     def resolve_to_module_id(self, query: str) -> str | None:
         """将文件路径或 module id 统一解析为 module id。"""
@@ -177,18 +253,15 @@ class ASTGraph:
         # Imports
         imports = sorted(self.imports_forward.get(mid, set()))
         if imports:
-            internal = []
-            external = []
-            for imp in imports:
-                if imp in self.nodes_by_id:
-                    internal.append(imp)
-                else:
-                    external.append(imp)
+            internal, external = self._classify_imports(set(imports))
             out.append("Imports:")
-            for imp in internal:
-                imp_path = self.resolve_to_path(imp)
+            for raw_imp, resolved_imp in internal:
+                imp_path = self.resolve_to_path(resolved_imp)
                 suffix = f" ({imp_path})" if imp_path else ""
-                out.append(f"  → {imp}{suffix}")
+                if raw_imp == resolved_imp:
+                    out.append(f"  → {raw_imp}{suffix}")
+                else:
+                    out.append(f"  → {raw_imp}  [resolved: {resolved_imp}{suffix}]")
             for imp in external:
                 out.append(f"  → {imp} (external)")
             out.append("")
@@ -222,16 +295,7 @@ class ASTGraph:
                 return self._format_who_imports(module_query, matches)
             return f"[NOT FOUND] No module matching '{module_query}'"
 
-        # 收集直接被引用 + 子 id 模糊匹配
-        importers: set[str] = set()
-
-        # 精确匹配
-        importers.update(self.imports_reverse.get(mid, set()))
-
-        # 模糊匹配：import target 可能是 mid 的子 path（如 import nexus.xxx.yyy）
-        for target, sources in self.imports_reverse.items():
-            if target.startswith(mid + '.') or target == mid:
-                importers.update(sources)
+        importers: set[str] = set(self.internal_imports_reverse.get(mid, set()))
 
         return self._format_who_imports(mid, importers)
 
@@ -261,15 +325,17 @@ class ASTGraph:
 
         # 上游：本文件 import 了谁
         forward = sorted(self.imports_forward.get(mid, set()))
-        internal_forward = [f for f in forward if f in self.nodes_by_id]
-        external_forward = [f for f in forward if f not in self.nodes_by_id]
+        internal_forward, external_forward = self._classify_imports(set(forward))
 
         out.append("Depends on (this file imports):")
         if internal_forward:
-            for dep in internal_forward:
-                dep_path = self.resolve_to_path(dep)
+            for raw_dep, resolved_dep in internal_forward:
+                dep_path = self.resolve_to_path(resolved_dep)
                 suffix = f" ({dep_path})" if dep_path else ""
-                out.append(f"  → {dep}{suffix}")
+                if raw_dep == resolved_dep:
+                    out.append(f"  → {raw_dep}{suffix}")
+                else:
+                    out.append(f"  → {raw_dep}  [resolved: {resolved_dep}{suffix}]")
         if external_forward:
             for dep in external_forward:
                 out.append(f"  → {dep} (external)")
@@ -278,11 +344,7 @@ class ASTGraph:
         out.append("")
 
         # 下游：谁 import 了本文件
-        importers: set[str] = set()
-        importers.update(self.imports_reverse.get(mid, set()))
-        for target, sources in self.imports_reverse.items():
-            if target.startswith(mid + '.') or target == mid:
-                importers.update(sources)
+        importers: set[str] = set(self.internal_imports_reverse.get(mid, set()))
 
         out.append("Depended by (other files import this):")
         if importers:
@@ -295,7 +357,7 @@ class ASTGraph:
         out.append("")
 
         downstream_count = len(importers)
-        upstream_count = len(internal_forward)
+        upstream_count = len({resolved for _raw, resolved in internal_forward})
         out.append(
             f"Impact summary: {upstream_count} upstream dependencies, "
             f"{downstream_count} downstream dependents"
@@ -312,39 +374,8 @@ class ASTGraph:
 
     def query_hub_analysis(self, top_n: int = 10) -> str:
         """--hub-analysis: 高扇入/高扇出核心节点识别。"""
-        # 只统计 Module 级
-        module_ids = {n['id'] for n in self.nodes if n['type'] == 'Module'}
-
-        # 扇入：被多少个内部模块引用
-        fan_in: dict[str, int] = defaultdict(int)
-        for target, sources in self.imports_reverse.items():
-            # 把 target 解析到最近的 module
-            resolved = target
-            if target not in module_ids:
-                # 尝试找到前缀匹配的 module
-                for mid in module_ids:
-                    if target.startswith(mid + '.') or target == mid:
-                        resolved = mid
-                        break
-            if resolved in module_ids:
-                # 只计 module 级的 source
-                internal_sources = {s for s in sources if s in module_ids}
-                fan_in[resolved] += len(internal_sources)
-
-        # 扇出：import 了多少个内部模块
-        fan_out: dict[str, int] = defaultdict(int)
-        for source, targets in self.imports_forward.items():
-            if source not in module_ids:
-                continue
-            for t in targets:
-                # 判断是内部模块
-                if t in module_ids:
-                    fan_out[source] += 1
-                else:
-                    for mid in module_ids:
-                        if t.startswith(mid + '.') or t == mid:
-                            fan_out[source] += 1
-                            break
+        fan_in = {target: len(sources) for target, sources in self.internal_imports_reverse.items()}
+        fan_out = {source: len(targets) for source, targets in self.internal_imports_forward.items()}
 
         out = ["=== Hub Analysis ===", ""]
 

@@ -5,8 +5,8 @@
 <h1 align="center">nexus-mapper</h1>
 
 <p align="center">
-  Build a persistent knowledge base for any codebase.<br>
-  New AI session, zero re-exploration.
+  Map a repository once.<br>
+  Give every later AI session a verified starting point.
 </p>
 
 <p align="center">
@@ -15,11 +15,11 @@
 
 ---
 
-## What you get
+## What It Does
 
-Run nexus-mapper on a repository once. It writes a `.nexus-map/` directory with everything an AI needs to understand the codebase — architecture, boundaries, hot files, dependency graph. Next time you open a chat window, the AI reads one file and already knows where everything lives.
+nexus-mapper is a repository-mapping skill for AI agents. It analyzes a local codebase, writes a persistent `.nexus-map/` knowledge base, and gives the next session a concrete place to start instead of forcing it to rediscover architecture from scratch.
 
-The mapper challenges its own first-pass hypothesis before it writes final assets. It prefers a small number of evidence-backed corrections over padded issue lists or fake certainty.
+This is not a generic "summarize the repo" prompt. The skill runs a gated PROBE workflow, challenges its own first-pass assumptions, and only then writes final assets. That design matters: it reduces the usual AI failure mode of turning first impressions into fake certainty.
 
 ```
 .nexus-map/
@@ -37,11 +37,20 @@ The mapper challenges its own first-pass hypothesis before it writes final asset
 └── raw/                  ← Source data: AST nodes, git statistics, filtered file tree.
 ```
 
-`INDEX.md` is the entry point. It is intentionally small — an AI can load it in full without truncation, and then navigate to deeper files as needed.
+`INDEX.md` is the entry point. It stays small on purpose so an AI can load it in full, recover global context quickly, and then drill into deeper files only when needed.
 
-Every generated Markdown file carries a small provenance header with `verified_at` and downgrade notes. If the repository contains known-but-unsupported languages, or languages that only have module-level AST coverage, nexus-mapper must say so explicitly instead of overstating parser confidence.
+Every generated Markdown file carries a provenance header with `verified_at` and downgrade notes. If the repository contains known-but-unsupported languages, or languages that only have module-level AST coverage, nexus-mapper says so explicitly instead of overstating parser confidence.
 
-If a repository needs extra language support beyond the built-in language set, an agent should first extend the analysis through command-line inputs such as `--add-extension` and `--add-query`. If the setup becomes too large or the queries are too long for one command, the agent can then switch to `--language-config <JSON_FILE>` as an explicit input.
+If a repository needs extra language support beyond the built-in language set, extend the run with `--add-extension` and `--add-query` first. If the configuration becomes too large for one command, switch to `--language-config <JSON_FILE>`.
+
+---
+
+## Why It Is Different
+
+- It is phase-gated. PROFILE, REASON, OBJECT, BENCHMARK, and EMIT are not optional.
+- It separates implemented, planned, and inferred systems so generated maps do not blur design docs with real code.
+- It keeps a second tool, `query_graph.py`, for on-demand structural checks after the map exists.
+- It is optimized for future sessions, not just the current one.
 
 ---
 
@@ -52,7 +61,7 @@ If a repository needs extra language support beyond the built-in language set, a
 | Python 3.10+ | `python --version` |
 | Shell execution | Your AI client must support running terminal commands |
 
-A git repository is recommended but not required. Without git history, the `hotspots/` analysis is skipped; everything else runs normally.
+A git repository is recommended but not required. Without git history, the `hotspots/` analysis is skipped and the rest still runs.
 
 **Install script dependencies before first use:**
 
@@ -71,7 +80,7 @@ Works with Claude Code, GitHub Copilot, Cursor, Cline, and any client that reads
 
 ---
 
-## Usage
+## How To Use It
 
 Point your AI at a local repository path:
 
@@ -79,13 +88,15 @@ Point your AI at a local repository path:
 Analyze /Users/me/projects/my-app and generate a knowledge map
 ```
 
-The AI runs the analysis, then writes `.nexus-map/` into the repository root. The next time you — or any other AI — needs to work on that codebase, start with:
+The AI runs the protocol and writes `.nexus-map/` into the repository root. The next time you, or any other AI, needs to work on that codebase, start with:
 
 ```
 Read .nexus-map/INDEX.md
 ```
 
-That's the full context, compressed and ready.
+That restores the global picture first.
+
+When a task becomes local and precise, do not guess from the summary alone. Use the on-demand query tool against the generated AST data.
 
 For the best long-term behavior, add a short persistent instruction to your host tool's memory file such as `AGENTS.md`, `CLAUDE.md`, or an equivalent file:
 
@@ -126,7 +137,33 @@ python scripts/query_graph.py .nexus-map/raw/ast_nodes.json --hub-analysis
 python scripts/query_graph.py .nexus-map/raw/ast_nodes.json --summary
 ```
 
-Zero extra dependencies — pure Python stdlib. The PROBE protocol uses it during REASON, OBJECT, and EMIT stages; you can also call it ad-hoc during development.
+Zero extra dependencies. Pure Python stdlib.
+
+Use it when you need facts such as:
+
+- What is inside this file?
+- Who imports this module?
+- If I change this file, what else moves?
+- Which internal modules behave like hubs?
+
+The PROBE protocol uses it during REASON, OBJECT, and EMIT. You can also call it directly during development.
+
+---
+
+## PROFILE Stage Command
+
+If you are running the scripts directly, the current baseline flow is:
+
+```bash
+python skills/nexus-mapper/scripts/extract_ast.py <repo_path> \
+  --file-tree-out .nexus-map/raw/file_tree.txt \
+  > <repo_path>/.nexus-map/raw/ast_nodes.json
+
+python skills/nexus-mapper/scripts/git_detective.py <repo_path> --days 90 \
+  > <repo_path>/.nexus-map/raw/git_stats.json
+```
+
+`--file-tree-out` uses the same exclusion rules as AST collection, so the file tree and AST scan stay aligned.
 
 ---
 

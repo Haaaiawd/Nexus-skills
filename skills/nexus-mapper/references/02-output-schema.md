@@ -143,6 +143,8 @@
 
 ## concepts/concept_model.json — Schema V1（EMIT 产出）
 
+Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`；若出现 `title`，视为非规范字段，应删除或合并回 `label`。
+
 ```json
 {
   "$schema": "nexus-mapper/concept-model/v1",
@@ -190,6 +192,7 @@
 | `id` | ✅ | 全局重复；含大写字母或空格（必须为 kebab-case 小写）|
 | `type` | ✅ | 不在枚举 `System / Domain / Module / Class / Function` 中 |
 | `label` | ✅ | 空字符串 |
+| `title` | ❌ | Schema V1 不定义该字段；若写入，视为多余字段 |
 | `responsibility` | ✅ | 空泛到无法验证；字数 < 10 或 > 120 |
 | `implementation_status` | ✅ | 不在枚举 `implemented / planned / inferred` 中 |
 | `code_path` | 条件必需 | `implementation_status=implemented` 但为空；或路径在 repo 中不实际存在 |

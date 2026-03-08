@@ -104,6 +104,8 @@ repo_path: 目标仓库的本地绝对路径（必填）
 - `verified_at`
 - `provenance`
 
+`concept_model.json` 的人类可读名称字段统一使用 `label`。不要添加 `title`；若某个生成结果出现 `title`，应在 EMIT 阶段删除并并回 `label` 语义。
+
 如果 PROFILE 阶段发现已知但未支持的语言文件，`provenance` 必须明确写出哪些部分属于人工推断或降级分析。
 如果 PROFILE 阶段发现 `module-only coverage`，也必须写清楚：这些语言已被计入 AST 文件覆盖，但没有类/函数级结构保证。
 如果 PROFILE 阶段发现某个通过覆盖配置声明的语言仍然无法加载 parser，也必须写清楚：这是 `configured-but-unavailable`，不能伪装成已覆盖。
@@ -167,6 +169,20 @@ python $SKILL_DIR/scripts/query_graph.py <ast_nodes.json> --summary
 ```
 
 这是一条 **建议写入宿主持久记忆** 的规则，目的是让 agent 在真正需要时自然想起读取或更新 `.nexus-map`。
+
+---
+
+## ⚡ PROBE 速查卡
+
+先看这张表，再按阶段回读对应 reference。这样保留硬门控，但不必每次在脑中重新拼装流程。
+
+| 阶段 | 先读什么 | 先跑什么 / 先做什么 | 通过标准 |
+|------|---------|--------------------|---------|
+| PROFILE | `references/01-probe-protocol.md` | `extract_ast.py`（可带 `--file-tree-out`）+ `git_detective.py` | `raw/ast_nodes.json`、`raw/file_tree.txt` 可用；git 数据按条件生成 |
+| REASON | `references/03-edge-cases.md` | 读 README / file_tree / 热点；必要时跑 `query_graph.py --hub-analysis` | 形成 1-5 个系统级假说，每个都有职责与状态 |
+| OBJECT | `references/04-object-framework.md` | 用 Structure / Evolution / Dependency 提 1-3 条高价值质疑 | 每条质疑都有证据线索和验证计划 |
+| BENCHMARK | 已加载协议即可 | 用 `view_file` / `grep_search` / `query_graph.py --impact` 验证 | `implemented` 路径已核实；`planned/inferred` 证据链完整 |
+| EMIT | `references/02-output-schema.md` | 先写 `.tmp/`，再整体落盘 | Schema 合法，Markdown 头部完整，`INDEX.md` 可冷启动 |
 
 ---
 
@@ -335,6 +351,11 @@ python $SKILL_DIR/scripts/extract_ast.py <repo_path> [--max-nodes 500] \
 # 若配置复杂，用 JSON 文件（格式参见 --language-config 说明）
 python $SKILL_DIR/scripts/extract_ast.py <repo_path> [--max-nodes 500] \
   --language-config /custom/path/to/language-config.json \
+  > <repo_path>/.nexus-map/raw/ast_nodes.json
+
+# PROFILE 阶段同时生成过滤后的文件树
+python $SKILL_DIR/scripts/extract_ast.py <repo_path> [--max-nodes 500] \
+  --file-tree-out .nexus-map/raw/file_tree.txt \
   > <repo_path>/.nexus-map/raw/ast_nodes.json
 ```
 

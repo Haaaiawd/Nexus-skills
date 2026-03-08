@@ -17,7 +17,10 @@ from typing import Any, Optional, cast
 EXCLUDE_DIRS = {'.git', '__pycache__', '.venv', 'venv', 'node_modules',
                 'dist', 'build', '.mypy_cache', '.pytest_cache', 'site-packages',
                 '.nexus-map', '.tox', '.eggs', 'target', 'cmake-build-debug',
-                '.vs', 'out', '_build', 'vendor'}
+                '.vs', 'out', '_build', 'vendor', '.ruff_cache', '.godot',
+                '.idea', '.vscode', '.nox'}
+
+EXCLUDE_FILE_SUFFIXES = ('.import', '.vulkan.cache')
 
 # ── 内建语言配置：从同目录 languages.json 加载 ────────────────────
 _LANGUAGES_JSON = Path(__file__).parent / 'languages.json'
@@ -49,6 +52,28 @@ def _load_builtin_languages() -> tuple[dict[str, str], dict[str, dict[str, str]]
 BUILTIN_EXTENSION_MAP, BUILTIN_LANG_QUERIES, BUILTIN_KNOWN_UNSUPPORTED_EXTENSIONS = (
     _load_builtin_languages()
 )
+
+
+def _should_skip_path(repo_path: Path, path: Path) -> bool:
+    rel_path = path.relative_to(repo_path)
+    if any(part in EXCLUDE_DIRS for part in rel_path.parts):
+        return True
+    if path.is_file() and any(path.name.endswith(suffix) for suffix in EXCLUDE_FILE_SUFFIXES):
+        return True
+    return False
+
+
+def write_filtered_file_tree(repo_path: Path, output_path: Path) -> None:
+    lines: list[str] = []
+    for path in sorted(repo_path.rglob('*')):
+        if _should_skip_path(repo_path, path):
+            continue
+        rel_path = path.relative_to(repo_path).as_posix()
+        suffix = '/' if path.is_dir() else ''
+        lines.append(rel_path + suffix)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text('\n'.join(lines) + ('\n' if lines else ''), encoding='utf-8')
 
 def _normalize_extension(ext: str) -> str:
     normalized = ext.strip().lower()
@@ -435,7 +460,7 @@ def collect_source_files(
     for p in repo_path.rglob('*'):
         if not p.is_file():
             continue
-        if any(part in EXCLUDE_DIRS for part in p.parts):
+        if _should_skip_path(repo_path, p):
             continue
 
         suffix = p.suffix.lower()
@@ -523,6 +548,10 @@ def main() -> None:
         '--language-config',
         help='Optional JSON file that adds or overrides extension mappings and tree-sitter queries. Useful for complex configurations.',
     )
+    parser.add_argument(
+        '--file-tree-out',
+        help='Optional output path for a filtered file tree (e.g. .nexus-map/raw/file_tree.txt). Uses the same exclude rules as AST collection.',
+    )
     args = parser.parse_args()
 
     repo_path = Path(args.repo_path).resolve()
@@ -531,6 +560,12 @@ def main() -> None:
         sys.exit(1)
     if not (repo_path / '.git').exists():
         sys.stderr.write(f"[WARNING] .git not found in {repo_path}, may not be a git repo\n")
+
+    if args.file_tree_out:
+        file_tree_path = Path(args.file_tree_out)
+        if not file_tree_path.is_absolute():
+            file_tree_path = repo_path / file_tree_path
+        write_filtered_file_tree(repo_path, file_tree_path.resolve())
 
     # 处理 CLI 自定义参数
     cli_ext_override, cli_query_override, cli_warnings, cli_custom_query_languages = _apply_cli_customizations(

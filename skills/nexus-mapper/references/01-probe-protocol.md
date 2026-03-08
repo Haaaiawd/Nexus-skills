@@ -31,17 +31,24 @@ python $SKILL_DIR/scripts/extract_ast.py $repo_path [--max-nodes 500] \
   [--language-config /custom/path/to/language-config.json] \
   > $repo_path/.nexus-map/raw/ast_nodes.json
 
+# 若希望同时生成过滤后的文件树，可直接复用同一套排除规则
+python $SKILL_DIR/scripts/extract_ast.py $repo_path [--max-nodes 500] \
+  [--file-tree-out .nexus-map/raw/file_tree.txt] \
+  > $repo_path/.nexus-map/raw/ast_nodes.json
+
 # 步骤 2: 运行 git 热点分析（仅在存在 .git 时）
 python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
   > $repo_path/.nexus-map/raw/git_stats.json
 
-# 步骤 3: 生成文件树（AI Agent 执行，使用 list_dir 工具）
-# 遍历目录，排除: .git/, node_modules/, __pycache__/, .venv/, dist/, build/, .nexus-map/
-# 写入 $repo_path/.nexus-map/raw/file_tree.txt
+# 步骤 3: 若步骤 1 未带 --file-tree-out，则补生成 file_tree.txt
+python $SKILL_DIR/scripts/extract_ast.py $repo_path [--max-nodes 500] \
+  --file-tree-out .nexus-map/raw/file_tree.txt \
+  > $repo_path/.nexus-map/raw/ast_nodes.json
 ```
 
 > `$SKILL_DIR` 为本 Skill 的安装路径（`.agent/skills/nexus-mapper` 或独立 repo 路径）。
 > `$repo_path` 为目标仓库的绝对路径。
+> `extract_ast.py --file-tree-out` 默认排除 `.git/`、`.nexus-map/`、`node_modules/`、`__pycache__/`、`.venv/`、`dist/`、`build/`、`.mypy_cache/`、`.pytest_cache/`、`.ruff_cache/`、`.godot/`，以及 `*.import`、`*.vulkan.cache` 等噪音文件。
 
 **完成检查（任一失败 → 停止，不进入 REASON）**
 - [ ] `raw/ast_nodes.json` 已写入（即使 `nodes` 为空列表也属正常——不支持的语言降级为空）
@@ -78,6 +85,7 @@ python $SKILL_DIR/scripts/git_detective.py $repo_path --days 90 \
   ```bash
   python $SKILL_DIR/scripts/query_graph.py $repo_path/.nexus-map/raw/ast_nodes.json --hub-analysis
   ```
+  该查询会自动兼容常见 `src-layout` Python/Java/Kotlin 项目的包名与文件路径差异；若结果仍为空，优先怀疑仓库内部本就缺少可解析的内部 import，而不是直接怀疑系统边界判断。
 
 **记录格式**（工作记忆，不写文件）
 ```

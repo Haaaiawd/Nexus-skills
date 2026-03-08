@@ -5,8 +5,8 @@
 <h1 align="center">nexus-mapper</h1>
 
 <p align="center">
-  为 AI Agent 生成可持续复用的代码仓库知识库。<br>
-  新开对话窗口，直接上下文接续，无需重新探索。
+  先把仓库地图建出来。<br>
+  后续每个 AI 会话都从已验证的上下文开始。
 </p>
 
 <p align="center">
@@ -15,11 +15,11 @@
 
 ---
 
-## 你能得到什么
+## 它到底做什么
 
-对一个仓库运行一次 nexus-mapper，它会在项目根目录写入 `.nexus-map/` 知识库，记录架构边界、系统分工、高频变更文件和依赖关系图。之后每次打开新对话，AI 读一个文件就知道整个项目的全貌。
+nexus-mapper 是一个给 AI Agent 用的仓库建图 skill。它分析本地代码库，写出持久化的 `.nexus-map/` 知识库，让后续会话先恢复全局上下文，再进入具体任务，而不是每次都从零摸索。
 
-它不会把第一眼猜测直接写成结论。正式产出前，协议会先用代码证据和 git 线索挑战初始判断，宁可少报，也不为了“看起来全面”而凑问题或装确定。
+它不是一个泛泛的“总结仓库”提示词。这个 skill 会按 PROBE 协议分阶段执行，先产出证据，再挑战初始判断，最后才写正式资产。它解决的是 AI 最常见的一个问题：把第一眼印象误写成结论。
 
 ```
 .nexus-map/
@@ -37,11 +37,20 @@
 └── raw/                  ← 原始数据：AST 节点、git 统计、过滤后的文件树。
 ```
 
-`INDEX.md` 是唯一的入口，刻意做得很小——AI 可以完整加载它，不会截断，需要深入时再按需读取其他文件。
+`INDEX.md` 是唯一的冷启动入口，刻意保持很小。AI 可以一次性完整读入，先恢复全局，再按需下钻。
 
-所有生成的 Markdown 文件都应带一个简短 provenance 头部，至少写明 `verified_at` 和降级说明。若仓库包含当前未支持的语言，或某些语言只有 Module 级 AST 覆盖，nexus-mapper 都必须显式说明，不能夸大解析可信度。
+所有生成的 Markdown 文件都带 provenance 头部，至少写明 `verified_at` 和降级说明。若仓库包含当前未支持的语言，或某些语言只有 Module 级 AST 覆盖，nexus-mapper 必须显式说明，不能夸大解析可信度。
 
-如果仓库需要补充超出内建范围的语言支持，agent 应先通过命令行参数扩展这次分析，例如 `--add-extension` 和 `--add-query`。只有当配置较长、query 过于复杂时，再改用 `--language-config <JSON_FILE>` 作为显式输入。
+如果仓库需要补充超出内建范围的语言支持，优先用 `--add-extension` 和 `--add-query` 扩展本次运行。只有当配置太长、不适合塞进一条命令时，再改用 `--language-config <JSON_FILE>`。
+
+---
+
+## 它为什么不一样
+
+- 它是阶段门控的，PROFILE、REASON、OBJECT、BENCHMARK、EMIT 都不能跳。
+- 它强制区分 implemented、planned、inferred，避免把设计稿当成已实现代码。
+- 地图生成后，还保留 `query_graph.py` 这个“放大镜”做局部验证。
+- 它的目标不是当前这次回答，而是后续所有会话都能少走弯路。
 
 ---
 
@@ -52,7 +61,7 @@
 | Python 3.10+ | `python --version` |
 | Shell 执行能力 | AI 客户端需支持运行终端命令 |
 
-有 git 历史会更完整，但不是必须的。没有 git 历史时，`hotspots/` 的分析会被跳过，其余正常运行。
+有 git 历史会更完整，但不是必须的。没有 git 历史时，`hotspots/` 分析会跳过，其余照常运行。
 
 **首次使用前安装脚本依赖：**
 
@@ -72,7 +81,7 @@ npx skills add haaaiawd/nexus-mapper
 
 ---
 
-## 使用方式
+## 怎么使用
 
 把本地仓库路径告诉你的 AI：
 
@@ -80,13 +89,15 @@ npx skills add haaaiawd/nexus-mapper
 帮我分析 /Users/me/projects/my-app 并生成知识库
 ```
 
-AI 完成分析后会在仓库根目录写入 `.nexus-map/`。下次打开这个项目时，直接说：
+AI 跑完整个协议后，会在仓库根目录写入 `.nexus-map/`。下次打开这个项目时，直接说：
 
 ```
 读取 .nexus-map/INDEX.md
 ```
 
-完整的上下文就这么接续了。
+这样先恢复全局上下文。
+
+如果任务已经进入局部判断，不要只靠摘要猜。直接用按需查询工具去验证结构和依赖。
 
 为了让这种行为在长期更稳定，建议把一小段持久规则写进宿主工具的记忆文件，例如 `AGENTS.md`、`CLAUDE.md` 或类似文件：
 
@@ -127,7 +138,33 @@ python scripts/query_graph.py .nexus-map/raw/ast_nodes.json --hub-analysis
 python scripts/query_graph.py .nexus-map/raw/ast_nodes.json --summary
 ```
 
-零额外依赖——纯 Python 标准库。PROBE 协议在 REASON / OBJECT / EMIT 阶段使用它辅助认知生成，你也可以在日常开发中随时调用。
+零额外依赖。纯 Python 标准库。
+
+适合拿它回答这类问题：
+
+- 这个文件里到底有什么？
+- 谁在引用这个模块？
+- 我改这个文件，会影响到哪里？
+- 哪些模块是真正的内部枢纽？
+
+PROBE 协议会在 REASON / OBJECT / EMIT 阶段使用它，你也可以在开发过程中直接调用。
+
+---
+
+## PROFILE 阶段命令
+
+如果你是直接跑脚本，当前推荐的基础流程是：
+
+```bash
+python skills/nexus-mapper/scripts/extract_ast.py <repo_path> \
+  --file-tree-out .nexus-map/raw/file_tree.txt \
+  > <repo_path>/.nexus-map/raw/ast_nodes.json
+
+python skills/nexus-mapper/scripts/git_detective.py <repo_path> --days 90 \
+  > <repo_path>/.nexus-map/raw/git_stats.json
+```
+
+`--file-tree-out` 和 AST 收集共用同一套排除规则，因此 file tree 不会和 AST 扫描结果漂移。
 
 ---
 
