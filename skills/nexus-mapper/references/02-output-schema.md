@@ -1,6 +1,6 @@
 # 输出 Schema 规范
 
-> ⛔ **EMIT 阶段硬门控**：本文件由 `01-probe-protocol.md` 的 EMIT 阶段门控强制触发读取，
+> **EMIT 阶段硬门控**：本文件由 `01-probe-protocol.md` 的 EMIT 阶段门控强制触发读取，
 > 写入任何 `.nexus-map/` 文件前必须完成本文阅读。
 > 本文 Schema 均基于实际运行输出校正，与脚本当前版本保持一致。
 
@@ -73,7 +73,7 @@
 
 **Edge 类型**：`contains`（模块→类，类→方法）/ `imports`（import 语句解析）
 
-### 可选 warnings
+### warnings 字段
 
 `warnings` 是可选数组，用来暴露不会导致 PROFILE 失败、但会影响下游可信度的降级信息，例如：
 - grammar 可加载，但当前仅有 Module 级覆盖
@@ -83,15 +83,15 @@
 
 ### 覆盖分层字段
 
-| 字段 | 含义 |
-|------|------|
-| `supported_file_counts` | 成功进入 AST 流程的文件数（包含完整结构覆盖和 module-only 覆盖） |
-| `languages_with_structural_queries` | 当前 bundled query 模板覆盖到的语言 |
-| `languages_with_custom_queries` | 通过 `--add-query` 或 `--language-config` 新增或覆盖 query 的语言 |
-| `module_only_file_counts` | grammar 可加载，但当前没有结构 query，只产出 Module 节点的语言 |
-| `known_unsupported_file_counts` | 已知存在但完全未进入 AST 流程的语言 |
-| `configured_but_unavailable_file_counts` | agent 明确要求支持该语言，但当前环境没有可用 parser，因此未进入 AST 流程 |
-| `custom_language_config_paths` | 本次实际加载的显式语言配置文件路径；纯 CLI 模式下为空 |
+| 字段                                     | 含义                                                              |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `supported_file_counts`                  | 成功进入 AST 流程的文件数（含完整结构覆盖和 module-only 覆盖）    |
+| `languages_with_structural_queries`      | 当前 bundled query 模板覆盖到的语言                               |
+| `languages_with_custom_queries`          | 通过 `--add-query` 或 `--language-config` 新增或覆盖 query 的语言 |
+| `module_only_file_counts`                | grammar 可加载，但当前没有结构 query，只产出 Module 节点的语言    |
+| `known_unsupported_file_counts`          | 已知存在但完全未进入 AST 流程的语言                               |
+| `configured_but_unavailable_file_counts` | agent 明确要求支持该语言，但当前环境没有可用 parser               |
+| `custom_language_config_paths`           | 本次实际加载的显式语言配置文件路径；纯 CLI 模式下为空             |
 
 ---
 
@@ -127,23 +127,17 @@
 > provenance: AST-backed except where explicitly marked inferred
 ```
 
-如存在语言降级或人工推断，`provenance` 必须扩展说明，例如：
+如存在语言降级或人工推断，`provenance` 必须扩展说明：
 
 ```markdown
 > provenance: AST-backed for Python; some custom DSL files were detected but not parsed by bundled AST tooling, so the affected dependency notes below are inferred from file tree and manual inspection.
 ```
 
-若存在显式语言配置文件，也建议补充一句其状态，例如：
-
-```markdown
-> provenance: Custom language overrides were loaded from /custom/path/to/language-config.json; files mapped to templ remain configured-but-unavailable in this environment because no parser could be loaded.
-```
-
 ---
 
-## concepts/concept_model.json — Schema V1（EMIT 产出）
+## concepts/concept_model.json — Schema V1
 
-Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`；若出现 `title`，视为非规范字段，应删除或合并回 `label`。
+Schema V1 的人类可读名称字段只有 `label`，不要额外引入 `title`；若出现 `title`，视为非规范字段，应删除。
 
 ```json
 {
@@ -187,22 +181,21 @@ Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`
 
 ### 节点字段校验规则
 
-| 字段 | 必需 | 触发 `[!ERROR]` 的情况 |
-|------|:----:|-----------------------|
-| `id` | ✅ | 全局重复；含大写字母或空格（必须为 kebab-case 小写）|
-| `type` | ✅ | 不在枚举 `System / Domain / Module / Class / Function` 中 |
-| `label` | ✅ | 空字符串 |
-| `title` | ❌ | Schema V1 不定义该字段；若写入，视为多余字段 |
-| `responsibility` | ✅ | 空泛到无法验证；字数 < 10 或 > 120 |
-| `implementation_status` | ✅ | 不在枚举 `implemented / planned / inferred` 中 |
-| `code_path` | 条件必需 | `implementation_status=implemented` 但为空；或路径在 repo 中不实际存在 |
-| `evidence_path` | 条件必需 | `implementation_status=planned/inferred` 但为空；或路径在 repo 中不实际存在 |
-| `evidence_gap` | 条件必需 | `implementation_status=planned/inferred` 但为空；或未明确说明缺失的是哪类证据 |
+| 字段                    |   必需   | 触发 `[!ERROR]` 的情况                                                      |
+| ----------------------- | :------: | --------------------------------------------------------------------------- |
+| `id`                    |    是    | 全局重复；含大写字母或空格（必须为 kebab-case 小写）                        |
+| `type`                  |    是    | 不在枚举 `System / Domain / Module / Class / Function` 中                   |
+| `label`                 |    是    | 空字符串                                                                    |
+| `title`                 |    否    | Schema V1 不定义该字段；若写入，视为多余字段                                |
+| `responsibility`        |    是    | 空泛到无法验证；字数 < 10 或 > 120                                          |
+| `implementation_status` |    是    | 不在枚举 `implemented / planned / inferred` 中                              |
+| `code_path`             | 条件必需 | `implementation_status=implemented` 但为空；或路径在 repo 中不实际存在      |
+| `evidence_path`         | 条件必需 | `implementation_status=planned/inferred` 但为空；或路径在 repo 中不实际存在 |
+| `evidence_gap`          | 条件必需 | `implementation_status=planned/inferred` 但为空                             |
 
 ### 节点状态表达规范
 
 **已实现节点**
-
 ```json
 {
   "implementation_status": "implemented",
@@ -213,7 +206,6 @@ Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`
 ```
 
 **计划中节点**
-
 ```json
 {
   "implementation_status": "planned",
@@ -224,7 +216,6 @@ Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`
 ```
 
 **推断节点**
-
 ```json
 {
   "implementation_status": "inferred",
@@ -236,32 +227,7 @@ Schema V1 的人类可读名称字段只有 `label`。不要额外引入 `title`
 
 ---
 
-## 🧭 不确定性与结论表达
-
-不要把模糊词本身当结论。真正的问题不是出现了 `maybe` 或“待确认”，而是只留下模糊词，却没有说明证据为什么不够。
-
-```
-不推荐裸写：待确认 · 可能是 · 疑似 · 也许 · 待定 · 暂不清楚 · 需要进一步 · 不确定
-不推荐裸写：pending · maybe · possibly · perhaps · TBD · to be confirmed
-```
-
-推荐写法：
-
-```markdown
-evidence gap: 未发现 `src/server/` 被任何入口文件直接引用，因此暂不把它标记为主系统。
-unknown: 仓库没有 git 历史，无法判断真实热点文件。
-```
-
-要求：
-- 可以保留不确定，但必须指出缺失的是哪一类证据
-- 结论段优先写已验证事实，再写尚未验证部分
-- 不要为了显得自信而删除真实存在的证据缺口
-
----
-
-## query_graph.py 输出格式参考（非写入文件，stdout 输出）
-
-`query_graph.py` 读取 `raw/ast_nodes.json`，输出 agent 友好的精简文本。以下是各查询模式的输出结构供参考。
+## query_graph.py 输出格式参考（stdout，非写入文件）
 
 ### --file
 
@@ -297,7 +263,6 @@ Imported by N module(s):
 
 Depends on (this file imports):
   → <module_id> (<path>)
-  → <package> (external)
 
 Depended by (other files import this):
   ← <module_id> (<path>)
@@ -305,7 +270,7 @@ Depended by (other files import this):
 Impact summary: N upstream dependencies, M downstream dependents
 
 # 以下仅在传入 --git-stats 且该文件存在 hotspot/coupling 数据时输出
-Git risk: 🔴 high (N changes in 90 days)
+Git risk: high (N changes in 90 days)
 Coupled files (co-change):
   - <peer_path> (coupling: 0.XX, N co-changes)
 ```

@@ -1,7 +1,7 @@
 # 边界案例与处理规范
 
-> ⛔ **REASON 阶段硬门控**：本文件由 `01-probe-protocol.md` 的 REASON 阶段门控强制触发读取，
-> 开始阅读项目文件前必须完成本文阅读，以提前识别边界场景（无 git 历史、monorepo 等）。
+> **REASON 阶段硬门控**：本文件由 `01-probe-protocol.md` 的 REASON 阶段门控强制触发读取，
+> 开始阅读项目文件前必须完成本文阅读，以提前识别边界场景。
 
 ---
 
@@ -47,11 +47,10 @@
 
 ## §4 多语言混合 repo
 
-- `extract_ast.py` 基于 `tree-sitter-language-pack`，支持 **17+ 语言**自动 dispatch（按文件扩展名）：
-  `.py` / `.js` / `.jsx` / `.ts` / `.tsx` / `.java` / `.go` / `.rs` / `.cs` / `.cpp` / `.hpp` / `.cc` / `.c` / `.kt` / `.rb` / `.swift` / `.scala` / `.php` / `.lua` / `.ex` / `.exs`
+- `extract_ast.py` 按文件扩展名自动 dispatch，支持 30+ 语言
 - **未知扩展名**：静默跳过，不报错；`stats.languages` 仅记录实际解析到节点的语言
 - 若所有已知语言文件数 < 3 → stderr 输出警告，仍继续，但分析质量可能偏低
-- `ast_nodes.json` 每个 Module 节点含 `"lang"` 字段（如 `"lang": "cpp"`），方便后续按语言过滤
+- `ast_nodes.json` 每个 Module 节点含 `"lang"` 字段，方便后续按语言过滤
 
 > [!NOTE]
 > **不支持的语言** 在 `ast_nodes.json` 中表现为 `nodes: []`（空列表）。这是正常降级行为，
@@ -71,27 +70,26 @@
 - 现象：文件进入 `ast_nodes.json`，但 `stats.module_only_file_counts` 记录了该语言
 - 处理：继续执行，不中止
 - EMIT 要求：
-  - 不得把这部分语言描述为“完整 AST 结构覆盖”
+  - 不得把这部分语言描述为"完整 AST 结构覆盖"
   - `systems.md` 和 `dependencies.md` 里涉及该语言的细粒度结构结论要保守表述
   - 允许产出 Module 级边界，但类/函数级结论需补充 provenance 说明
 
-  ### 通过 CLI 或显式配置补充了语言，但当前环境没有可用 parser
+### 通过 CLI 或显式配置补充了语言，但当前环境没有可用 parser
 
-  - 现象：agent 通过 `--add-extension` / `--language-config` 补充了语言映射，但 `ast_nodes.json.stats.configured_but_unavailable_file_counts` 非空
-  - 处理：继续执行，不中止；但必须把这部分视为 **未覆盖**，而不是 `module-only`
-  - EMIT 要求：
-    - `INDEX.md` 和 `systems.md` 说明本次确实尝试补充语言支持，但对应 parser 在当前环境不可用
-    - `dependencies.md` 中涉及该语言的结论只能写成 `manual inspection` 或 `inferred`
-    - 如果后续 agent 要补齐支持，应优先修正 parser 名称或环境，而不是伪造 query 结果
+- 现象：agent 通过 `--add-extension` / `--language-config` 补充了语言映射，但 `configured_but_unavailable_file_counts` 非空
+- 处理：继续执行，不中止；但必须把这部分视为**未覆盖**，而不是 `module-only`
+- EMIT 要求：
+  - `INDEX.md` 和 `systems.md` 说明本次确实尝试补充语言支持，但对应 parser 不可用
+  - `dependencies.md` 中涉及该语言的结论只能写成 `manual inspection` 或 `inferred`
 
-  ### 通过 CLI 或显式配置补充了语言 query
+### 通过 CLI 或显式配置补充了语言 query
 
-  - 现象：agent 通过 `--add-query` 或 `--language-config` 补充了 query，且 `ast_nodes.json.stats.languages_with_custom_queries` 非空
-  - 处理：继续执行，不中止；这属于正式能力，不应当被视为“实验性旁路”
-  - EMIT 要求：
-    - 对自定义 query 覆盖的语言保持与内建语言同等标准
-    - 若 query 能提取类/函数，就按 `structural coverage` 对待
-    - 若 query 为空或只补了扩展名映射，就按 `module-only` 或 `configured-but-unavailable` 诚实落地
+- 现象：agent 通过 `--add-query` 或 `--language-config` 补充了 query，且 `languages_with_custom_queries` 非空
+- 处理：继续执行，不中止；这属于正式能力，不应当被视为"实验性旁路"
+- EMIT 要求：
+  - 对自定义 query 覆盖的语言保持与内建语言同等标准
+  - 若 query 能提取类/函数，就按 `structural coverage` 对待
+  - 若 query 为空或只补了扩展名映射，就按 `module-only` 或 `configured-but-unavailable` 诚实落地
 
 ---
 
@@ -106,7 +104,7 @@
 - `file_tree.txt` 行数 > 500 时：REASON 阶段仅读取前 300 行感知结构
 
 ### 带有路线图 / Sprint 状态的仓库
-- 现象：README、ROADMAP、TASKS 等文档包含 `Sprint 1/2/3`、`in progress`、`next` 之类的时间敏感状态
+- 现象：README、ROADMAP、TASKS 等文档包含时间敏感状态（`Sprint 1/2/3`、`in progress` 等）
 - 处理：允许摘要，但必须附 `verified_at` 和源文档路径
 - 禁止：把无日期的进度状态写成当前事实
 
